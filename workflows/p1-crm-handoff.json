@@ -1,0 +1,1203 @@
+{
+  "name": "P1-03 CRM Handoff",
+  "nodes": [
+    {
+      "parameters": {
+        "description": "Accepts a qualified lead decision from P1-01/P1-02. Upserts HubSpot contact, company, and deal, verifies returned IDs, then updates Airtable lead state. Existing_customer/spam/low-confidence leads never reach this workflow.",
+        "inputSource": "passthrough",
+        "returnOutput": "lastRunOnly"
+      },
+      "id": "p1-crm-trigger",
+      "name": "On CRM Handoff Request",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -700,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $input.first().json;\nconst parts = String(j.name || '').trim().split(/\\s+/);\nconst firstname = parts[0] || '';\nconst lastname = parts.slice(1).join(' ') || '';\nconst contact_properties = { email: j.email, firstname, lastname, company: j.company || '', phone: j.phone || '', lifecyclestage: 'lead' };\nconst deal_properties = { dealname: 'Lead: ' + (j.company || j.name || j.email), dealstage: 'qualifiedtobuy', pipeline: 'default' };\nreturn [{ json: { ...j, contact_properties, deal_properties, company_name: j.company || '' } }];"
+      },
+      "id": "p1-crm-prepare",
+      "name": "Prepare CRM Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "resource": "record",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE-AIRTABLE-BASE-ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "REPLACE-TABLE-ID",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "crm_sync_status": "pending",
+            "last_action_at": "={{ $now.toISO() }}",
+            "updated_at": "={{ $now.toISO() }}",
+            "id": "={{ $('Prepare CRM Input').item.json.lead_id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "p1-crm-set-pending",
+      "name": "Set CRM Sync Pending",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        -220,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/contacts/search",
+        "authentication": "predefinedCredentialType",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ filterGroups: [{ filters: [{ value: $('Prepare CRM Input').item.json.email, propertyName: 'email', operator: 'EQ' }] }], properties: ['email','firstname','lastname','company'] }) }}",
+        "options": {
+          "response": {
+            "fullResponse": true,
+            "neverError": true
+          }
+        },
+        "nodeCredentialType": "hubspotAppToken"
+      },
+      "id": "p1-crm-search-contact",
+      "name": "Search HubSpot Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        20,
+        0
+      ],
+      "notes": "HubSpot OAuth2 credential bound by a controlled test run. neverError + fullResponse so status codes are classified in code, not thrown.",
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Prepare CRM Input').item.json;\nconst resp = $input.first().json;\nconst err = resp.error || {};\nconst errText = String(err.message || resp.message || '');\nconst status = Number(resp.statusCode || resp.status || err.httpCode || err.statusCode || (/auth|api key|unauthor/i.test(errText) ? 401 : (errText ? 500 : 200)));\nconst body = resp.body || resp;\nconst results = (body && body.results) || [];\nconst existing = results[0];\nconst contactId = existing ? existing.id : null;\nlet action = 'create';\nif (status >= 400) action = 'error';\nelse if (contactId) action = 'update';\nreturn [{ json: { ...lead, contact_action: action, contact_id: contactId, search_status: status } }];"
+      },
+      "id": "p1-crm-resolve-contact",
+      "name": "Resolve Contact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.contact_action }}",
+                    "rightValue": "update",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "update"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.contact_action }}",
+                    "rightValue": "create",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "create"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "p1-crm-contact-switch",
+      "name": "Contact Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ 'https://api.hubapi.com/crm/v3/objects/contacts/' + $json.contact_id }}",
+        "authentication": "predefinedCredentialType",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ properties: $('Prepare CRM Input').item.json.contact_properties }) }}",
+        "options": {
+          "response": {
+            "fullResponse": true,
+            "neverError": true
+          }
+        },
+        "nodeCredentialType": "hubspotAppToken"
+      },
+      "id": "p1-crm-update-contact",
+      "name": "Update HubSpot Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        760,
+        -160
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "notes": "Capped retry for transient 429/5xx. Auth (401/403) is not retried because neverError returns the status to the verifier instead of throwing.",
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/contacts",
+        "authentication": "predefinedCredentialType",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ properties: $('Prepare CRM Input').item.json.contact_properties }) }}",
+        "options": {
+          "response": {
+            "fullResponse": true,
+            "neverError": true
+          }
+        },
+        "nodeCredentialType": "hubspotAppToken"
+      },
+      "id": "p1-crm-create-contact",
+      "name": "Create HubSpot Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        760,
+        120
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Resolve Contact').item.json;\nconst resp = $input.first().json;\nconst status = resp.statusCode || resp.status || 200;\nconst body = resp.body || resp;\nlet contactId = lead.contact_id;\nif (body && body.id) contactId = body.id;\nreturn [{ json: { ...lead, contact_id: contactId, contact_status: status } }];"
+      },
+      "id": "p1-crm-capture-contact",
+      "name": "Capture Contact ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/companies/search",
+        "authentication": "predefinedCredentialType",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ filterGroups: [{ filters: [{ value: $('Prepare CRM Input').item.json.company_name, propertyName: 'name', operator: 'EQ' }] }], properties: ['name','domain'] }) }}",
+        "options": {
+          "response": {
+            "fullResponse": true,
+            "neverError": true
+          }
+        },
+        "nodeCredentialType": "hubspotAppToken"
+      },
+      "id": "p1-crm-search-company",
+      "name": "Search HubSpot Company",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1260,
+        0
+      ],
+      "notes": "Company upsert so crm_company_id is a verified external ID, not a placeholder.",
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Capture Contact ID').item.json;\nconst resp = $input.first().json;\nconst status = resp.statusCode || resp.status || 200;\nconst body = resp.body || resp;\nconst results = (body && body.results) || [];\nconst existing = results[0];\nconst companyId = existing ? existing.id : null;\nlet action = 'skip';\nif (status >= 400) action = 'skip';\nelse if (!companyId && lead.company_name) action = 'create';\nreturn [{ json: { ...lead, company_action: action, company_id: companyId, company_search_status: status } }];"
+      },
+      "id": "p1-crm-resolve-company",
+      "name": "Resolve Company",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.company_action }}",
+              "rightValue": "create",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "p1-crm-company-if",
+      "name": "Company Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1740,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/companies",
+        "authentication": "predefinedCredentialType",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ properties: { name: $('Prepare CRM Input').item.json.company_name } }) }}",
+        "options": {
+          "response": {
+            "fullResponse": true,
+            "neverError": true
+          }
+        },
+        "nodeCredentialType": "hubspotAppToken"
+      },
+      "id": "p1-crm-create-company",
+      "name": "Create HubSpot Company",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1980,
+        -160
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Resolve Company').item.json;\nconst resp = $input.first().json;\nconst status = resp.statusCode || resp.status || 200;\nconst body = resp.body || resp;\nlet companyId = lead.company_id;\nif (body && body.id) companyId = body.id;\nconst companyStatus = lead.company_action === 'create' ? status : (lead.company_search_status || 200);\nreturn [{ json: { ...lead, company_id: companyId || '', company_status: companyStatus } }];"
+      },
+      "id": "p1-crm-capture-company",
+      "name": "Capture Company ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Capture Company ID').item.json;\nconst associations = [{ to: { id: lead.contact_id }, types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 3 }] }];\nif (lead.company_id) associations.push({ to: { id: lead.company_id }, types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 5 }] });\nconst deal_body = { properties: lead.deal_properties, associations };\nreturn [{ json: { ...lead, deal_body } }];"
+      },
+      "id": "p1-crm-prepare-deal",
+      "name": "Prepare Deal Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2460,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/deals",
+        "authentication": "predefinedCredentialType",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prepare Deal Request').item.json.deal_body) }}",
+        "options": {
+          "response": {
+            "fullResponse": true,
+            "neverError": true
+          }
+        },
+        "nodeCredentialType": "hubspotAppToken"
+      },
+      "id": "p1-crm-create-deal",
+      "name": "Create HubSpot Deal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2700,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "notes": "Deal is associated with the verified contact (and company when present). Live-verified HubSpot associationTypeIds: 3 (deal-to-contact) and 5 (deal-to-company).",
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Capture Company ID').item.json;\nconst dealResp = $input.first().json;\nconst dealStatus = dealResp.statusCode || dealResp.status || 200;\nconst dealBody = dealResp.body || dealResp;\nlet dealId = (dealBody && dealBody.id) || null;\nconst contactId = lead.contact_id;\nconst contactStatus = lead.contact_status || 200;\nlet verified = true;\nlet error_code = '';\nlet error_class = '';\nconst code = Math.max(contactStatus, dealStatus);\nif (code >= 400) {\n  verified = false;\n  if (code === 401 || code === 403) { error_code = 'auth_error'; error_class = 'auth'; }\n  else if (code === 429 || code >= 500) { error_code = 'transient'; error_class = 'transient'; }\n  else { error_code = 'http_' + code; error_class = 'transient'; }\n}\nif (verified && (!contactId || !dealId)) { verified = false; error_code = 'missing_external_ids'; error_class = 'transient'; }\nreturn [{ json: { ...lead, contact_id: contactId, deal_id: dealId, contact_status: contactStatus, deal_status: dealStatus, verified, error_code, error_class } }];"
+      },
+      "id": "p1-crm-verify",
+      "name": "Verify CRM Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2940,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.verified }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "p1-crm-verified-if",
+      "name": "CRM Verified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3180,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "resource": "record",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE-AIRTABLE-BASE-ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "REPLACE-TABLE-ID",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "crm_sync_status": "synced",
+            "crm_contact_id": "={{ $('Verify CRM Result').item.json.contact_id }}",
+            "crm_company_id": "={{ $('Verify CRM Result').item.json.company_id }}",
+            "crm_deal_id": "={{ $('Verify CRM Result').item.json.deal_id }}",
+            "last_action_at": "={{ $now.toISO() }}",
+            "updated_at": "={{ $now.toISO() }}",
+            "id": "={{ $('Verify CRM Result').item.json.lead_id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "p1-crm-update-synced",
+      "name": "Update Lead Synced",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        3420,
+        -160
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "notes": "Prototype defect corrected: synced state + external IDs are written ONLY after the HubSpot contact and deal IDs are verified."
+    },
+    {
+      "parameters": {
+        "authentication": "accessToken",
+        "resource": "task",
+        "operation": "create",
+        "workspace": "REPLACE-ASANA-WORKSPACE-ID",
+        "name": "={{ 'Qualified lead: ' + ($('Verify CRM Result').item.json.company || $('Verify CRM Result').item.json.name) + ' (' + $('Verify CRM Result').item.json.temperature + ', score ' + $('Verify CRM Result').item.json.score + ')' }}",
+        "otherProperties": {
+          "projects": [
+            "REPLACE-ASANA-PROJECT-ID"
+          ],
+          "notes": "=Lead: {{ $('Verify CRM Result').item.json.name }} ({{ $('Verify CRM Result').item.json.email }})\nCompany: {{ $('Verify CRM Result').item.json.company }}\nTemperature: {{ $('Verify CRM Result').item.json.temperature }} (score {{ $('Verify CRM Result').item.json.score }})\nIntent: {{ $('Verify CRM Result').item.json.intent }}\nSource: {{ $('Verify CRM Result').item.json.source }}\nOwner: {{ $('Verify CRM Result').item.json.owner_id }}\n\nSummary: {{ $('Verify CRM Result').item.json.summary }}\n\nHubSpot contact: {{ $('Verify CRM Result').item.json.contact_id }}\nHubSpot company: {{ $('Verify CRM Result').item.json.company_id }}\nHubSpot deal: {{ $('Verify CRM Result').item.json.deal_id }}\n\nBooking: {{ $('Verify CRM Result').item.json.calendar_link }}"
+        }
+      },
+      "id": "p1-crm-notify",
+      "name": "Notify Sales Owner",
+      "type": "n8n-nodes-base.asana",
+      "typeVersion": 1,
+      "position": [
+        3660,
+        -160
+      ],
+      "continueOnFail": true,
+      "notes": "Alerts the routed sales owner. continueOnFail so a notification failure cannot erase the already-synced deal."
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Verify CRM Result').item.json;\nconst resp = $input.first().json;\nlet notify_ok = true;\nif (resp && resp.error) notify_ok = false;\nelse if (resp && resp.json && resp.json.errors) notify_ok = false;\nelse if (resp && resp.statusCode && resp.statusCode >= 400) notify_ok = false;\nreturn [{ json: { ...lead, notification_status: notify_ok ? 'sent' : 'failed', deal_unchanged: true } }];"
+      },
+      "id": "p1-crm-notify-result",
+      "name": "Mark Notification Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3900,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.notification_status }}",
+              "rightValue": "sent",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "p1-crm-notify-if",
+      "name": "Notify OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        4140,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "resource": "record",
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE-AIRTABLE-BASE-ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "REPLACE-TABLE-ID",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "correlation_id": "={{ $('Mark Notification Result').item.json.correlation_id }}",
+            "project_id": "P1",
+            "workflow_id": "P1-03 CRM Handoff",
+            "failed_stage": "owner_notification",
+            "sanitized_input": "={{ JSON.stringify({ idempotency_key: $('Mark Notification Result').item.json.idempotency_key, lead_id: $('Mark Notification Result').item.json.lead_id, crm_deal_id: $('Mark Notification Result').item.json.deal_id }).slice(0, 2000) }}",
+            "error_code": "notification_failed",
+            "retryable": true,
+            "attempts": 1,
+            "status": "pending",
+            "created_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "p1-crm-notify-deadletter",
+      "name": "Write Notification Dead Letter",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        4380,
+        -40
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "notes": "Notification failure is recorded independently so it can be replayed without touching the already-synced deal (P1-E2E-012)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Mark Notification Result').item.json;\nreturn [{ json: {\n  correlation_id: lead.correlation_id,\n  idempotency_key: lead.idempotency_key,\n  lead_id: lead.lead_id,\n  crm_sync_status: 'synced',\n  crm_contact_id: lead.contact_id,\n  crm_company_id: lead.company_id,\n  crm_deal_id: lead.deal_id,\n  notification_status: lead.notification_status,\n  deal_created: true,\n  outcome: 'crm_handoff_success'\n}}];"
+      },
+      "id": "p1-crm-return-ok",
+      "name": "Return CRM Handoff Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4620,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const incoming = $input.first().json || {};\nconst resolve = $('Resolve Contact').item.json || {};\nlet status = incoming.contact_status || incoming.deal_status || incoming.search_status || resolve.search_status || 0;\nlet error_class = incoming.error_class || '';\nlet error_code = incoming.error_code || '';\nif (!error_class) {\n  if (status === 401 || status === 403) error_class = 'auth';\n  else if (status === 429 || status >= 500) error_class = 'transient';\n  else if (status >= 400) error_class = 'transient';\n  else error_class = 'transient';\n}\nif (!error_code) error_code = status ? ('http_' + status) : 'crm_failure';\nreturn [{ json: { ...resolve, ...incoming, error_class, error_code, failure_status: status } }];"
+      },
+      "id": "p1-crm-fail-handler",
+      "name": "CRM Failure Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3420,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.error_class }}",
+                    "rightValue": "auth",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "auth"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.error_class }}",
+                    "rightValue": "transient",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "transient"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "p1-crm-fail-switch",
+      "name": "CRM Failure Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        3660,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "accessToken",
+        "resource": "task",
+        "operation": "create",
+        "workspace": "REPLACE-ASANA-WORKSPACE-ID",
+        "name": "={{ '[ALERT][CRITICAL] CRM auth error — fix HubSpot credential' }}",
+        "otherProperties": {
+          "projects": [
+            "REPLACE-ASANA-PROJECT-ID"
+          ],
+          "notes": "=Immediate configuration alert: HubSpot returned 401/403. No retry storm attempted. The CRM credential must be corrected before re-running CRM handoff.\n\nCorrelation ID: {{ $('CRM Failure Handler').item.json.correlation_id }}\nLead ID: {{ $('CRM Failure Handler').item.json.lead_id }}\nError code: {{ $('CRM Failure Handler').item.json.error_code }}\nRunbook: docs/setup.md (Failure & Replay section)"
+        }
+      },
+      "id": "p1-crm-alert-auth",
+      "name": "Alert Config Error",
+      "type": "n8n-nodes-base.asana",
+      "typeVersion": 1,
+      "position": [
+        3900,
+        80
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "notes": "401/403 = permanent configuration error. Single immediate alert, no capped retry loop (P1-E2E-010)."
+    },
+    {
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "resource": "record",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE-AIRTABLE-BASE-ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "REPLACE-TABLE-ID",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "crm_sync_status": "failed",
+            "last_error_code": "={{ $('CRM Failure Handler').item.json.error_code }}",
+            "last_action_at": "={{ $now.toISO() }}",
+            "updated_at": "={{ $now.toISO() }}",
+            "id": "={{ $('CRM Failure Handler').item.json.lead_id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "p1-crm-mark-failed",
+      "name": "Mark Lead Failed",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        4140,
+        220
+      ],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "resource": "record",
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE-AIRTABLE-BASE-ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "REPLACE-TABLE-ID",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "correlation_id": "={{ $('CRM Failure Handler').item.json.correlation_id }}",
+            "project_id": "P1",
+            "workflow_id": "P1-03 CRM Handoff",
+            "failed_stage": "crm_handoff",
+            "sanitized_input": "={{ JSON.stringify({ idempotency_key: $('CRM Failure Handler').item.json.idempotency_key, lead_id: $('CRM Failure Handler').item.json.lead_id, email: $('CRM Failure Handler').item.json.email, company: $('CRM Failure Handler').item.json.company }).slice(0, 2000) }}",
+            "error_code": "={{ $('CRM Failure Handler').item.json.error_code }}",
+            "retryable": "={{ $('CRM Failure Handler').item.json.error_class === 'transient' }}",
+            "attempts": 3,
+            "status": "pending",
+            "created_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "p1-crm-deadletter",
+      "name": "Write Dead Letter",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        4380,
+        220
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "notes": "Dead-letter with replay context after capped retry exhausted (429/5xx) or permanent auth failure (retryable=false). No false synced state is written (P1-E2E-009)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const f = $('CRM Failure Handler').item.json;\nreturn [{ json: {\n  correlation_id: f.correlation_id,\n  idempotency_key: f.idempotency_key,\n  lead_id: f.lead_id,\n  crm_sync_status: 'failed',\n  error_class: f.error_class,\n  error_code: f.error_code,\n  deal_created: false,\n  outcome: 'crm_handoff_failed'\n}}];"
+      },
+      "id": "p1-crm-return-fail",
+      "name": "Return Failure Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4620,
+        220
+      ]
+    }
+  ],
+  "connections": {
+    "On CRM Handoff Request": {
+      "main": [
+        [
+          {
+            "node": "Prepare CRM Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare CRM Input": {
+      "main": [
+        [
+          {
+            "node": "Set CRM Sync Pending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set CRM Sync Pending": {
+      "main": [
+        [
+          {
+            "node": "Search HubSpot Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search HubSpot Contact": {
+      "main": [
+        [
+          {
+            "node": "Resolve Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Contact": {
+      "main": [
+        [
+          {
+            "node": "Contact Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contact Action": {
+      "main": [
+        [
+          {
+            "node": "Update HubSpot Contact",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create HubSpot Contact",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CRM Failure Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update HubSpot Contact": {
+      "main": [
+        [
+          {
+            "node": "Capture Contact ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create HubSpot Contact": {
+      "main": [
+        [
+          {
+            "node": "Capture Contact ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Contact ID": {
+      "main": [
+        [
+          {
+            "node": "Search HubSpot Company",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search HubSpot Company": {
+      "main": [
+        [
+          {
+            "node": "Resolve Company",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Company": {
+      "main": [
+        [
+          {
+            "node": "Company Needed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Company Needed?": {
+      "main": [
+        [
+          {
+            "node": "Create HubSpot Company",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capture Company ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create HubSpot Company": {
+      "main": [
+        [
+          {
+            "node": "Capture Company ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Company ID": {
+      "main": [
+        [
+          {
+            "node": "Prepare Deal Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Deal Request": {
+      "main": [
+        [
+          {
+            "node": "Create HubSpot Deal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create HubSpot Deal": {
+      "main": [
+        [
+          {
+            "node": "Verify CRM Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify CRM Result": {
+      "main": [
+        [
+          {
+            "node": "CRM Verified?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRM Verified?": {
+      "main": [
+        [
+          {
+            "node": "Update Lead Synced",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CRM Failure Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Lead Synced": {
+      "main": [
+        [
+          {
+            "node": "Notify Sales Owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Sales Owner": {
+      "main": [
+        [
+          {
+            "node": "Mark Notification Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Notification Result": {
+      "main": [
+        [
+          {
+            "node": "Notify OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify OK?": {
+      "main": [
+        [
+          {
+            "node": "Return CRM Handoff Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Write Notification Dead Letter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Notification Dead Letter": {
+      "main": [
+        [
+          {
+            "node": "Return CRM Handoff Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRM Failure Handler": {
+      "main": [
+        [
+          {
+            "node": "CRM Failure Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRM Failure Type": {
+      "main": [
+        [
+          {
+            "node": "Alert Config Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Lead Failed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Lead Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Config Error": {
+      "main": [
+        [
+          {
+            "node": "Mark Lead Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Lead Failed": {
+      "main": [
+        [
+          {
+            "node": "Write Dead Letter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Dead Letter": {
+      "main": [
+        [
+          {
+            "node": "Return Failure Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "REPLACE-SHARED-ERROR-WORKFLOW-ID"
+  },
+  "active": false
+}

@@ -1,0 +1,17 @@
+{
+  "test_id": "P1-E2E-015",
+  "scenario": "Weekly report",
+  "input": {
+    "report_window": "2026-W29",
+    "aggregation_scope": "all leads in window",
+    "received_at": "2026-07-15T09:14:00+05:30",
+    "correlation_id": "p1-c-015",
+    "idempotency_key": "test:P1-E2E-015"
+  },
+  "expected": {
+    "aggregates": "counts by temperature/qualification_status/crm_sync_status match seeded records exactly",
+    "failures": "failed syncs visible",
+    "outcome": "deterministic stored aggregates; AI may summarize but not invent values"
+  },
+  "status": "not_run_live"
+}

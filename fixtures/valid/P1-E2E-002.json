@@ -1,0 +1,23 @@
+{
+  "test_id": "P1-E2E-002",
+  "scenario": "Warm lead missing budget",
+  "input": {
+    "source": "webhook",
+    "source_event_id": "wh-2031",
+    "name": "Dev Patel",
+    "email": "dev.patel@northstar.example",
+    "company": "Acme Co",
+    "message": "Interested in your automation service. Looking to start in 4 weeks for a team of 8.",
+    "consent_status": "unknown",
+    "campaign": null,
+    "received_at": "2026-07-15T09:14:00+05:30",
+    "correlation_id": "p1-c-002",
+    "idempotency_key": "webhook:wh-2031"
+  },
+  "expected": {
+    "lead": "created with score<warm threshold OR missing required budget",
+    "crm_sync_status": "never synced; no deal",
+    "outcome": "approved missing-question draft created; follow_up_at stored"
+  },
+  "status": "not_run_live"
+}

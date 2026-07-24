@@ -1,0 +1,23 @@
+{
+  "test_id": "P1-E2E-008",
+  "scenario": "Returning lead adds timeline",
+  "input": {
+    "source": "gmail",
+    "source_event_id": "gmail-5502",
+    "name": "Dev Patel",
+    "email": "dev.patel@northstar.example",
+    "company": "Acme Co",
+    "message": "Following up — budget is now $9k, we want to start in 2 weeks.",
+    "consent_status": "known-opt-in",
+    "campaign": null,
+    "received_at": "2026-07-15T09:14:00+05:30",
+    "correlation_id": "p1-c-008",
+    "idempotency_key": "gmail:gmail-5502"
+  },
+  "expected": {
+    "merge": "existing facts preserved (company kept), new budget/timeline merged",
+    "score": "recalculated",
+    "outcome": "no blank overwrites known values"
+  },
+  "status": "not_run_live"
+}

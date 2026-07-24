@@ -1,0 +1,23 @@
+{
+  "test_id": "P1-E2E-004",
+  "scenario": "Low AI confidence",
+  "input": {
+    "source": "webhook",
+    "source_event_id": "wh-2032",
+    "name": "Sam Owens",
+    "email": "sam@northstar.example",
+    "company": null,
+    "message": "Hey, saw your post, maybe interested? Not sure.",
+    "consent_status": "unknown",
+    "campaign": null,
+    "received_at": "2026-07-15T09:14:00+05:30",
+    "correlation_id": "p1-c-004",
+    "idempotency_key": "webhook:wh-2032"
+  },
+  "expected": {
+    "lead": "created with qualification_status=review_required",
+    "ai_confidence": "<0.70",
+    "outcome": "review record + human alert; no automated external side effect; no deal"
+  },
+  "status": "not_run_live"
+}

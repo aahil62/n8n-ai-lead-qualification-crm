@@ -1,0 +1,210 @@
+{
+  "name": "P1-04 Follow-Up Sweeper",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "p1-sweep-trigger",
+      "name": "Daily 09:00 IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "resource": "record",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE-AIRTABLE-BASE-ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "REPLACE-TABLE-ID",
+          "mode": "id"
+        },
+        "filterByFormula": "AND({follow_up_at} IS NOT BLANK(), DATETIME_DIFF({follow_up_at}, TODAY(), 'days') <= 0)",
+        "limit": 100,
+        "options": {},
+        "returnAll": false
+      },
+      "id": "p1-sweep-get-due",
+      "name": "Get Due Follow-ups",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        -160,
+        0
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const today = new Date().toISOString().slice(0, 10);\nconst rows = $input.all().map(i => { const f = i.json.fields || i.json; return { id: i.json.id, ...f }; });\nconst due = rows.filter(r => {\n  if (!r.follow_up_at) return false;\n  const fu = String(r.follow_up_at).slice(0, 10);\n  if (fu > today) return false;\n  const rem = r.reminder_sent_at ? String(r.reminder_sent_at).slice(0, 10) : (r.last_reminded_at ? String(r.last_reminded_at).slice(0, 10) : '');\n  if (rem && rem >= fu) return false;\n  return true;\n});\nreturn due.map(r => ({ json: {\n  lead_id: r.id,\n  idempotency_key: r.idempotency_key || '',\n  correlation_id: r.correlation_id || '',\n  name: r.name || '',\n  email: r.email || '',\n  company: r.company || '',\n  follow_up_at: r.follow_up_at,\n  owner_id: r.owner_id || 'unassigned',\n  summary: r.summary || '',\n  score: r.score || 0,\n  temperature: r.temperature || '',\n  qualification_status: r.qualification_status || ''\n}}));"
+      },
+      "id": "p1-sweep-filter",
+      "name": "Filter Unreminded",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "accessToken",
+        "resource": "task",
+        "operation": "create",
+        "workspace": "REPLACE-ASANA-WORKSPACE-ID",
+        "name": "={{ 'Follow-up due: ' + $json.name + ' (' + ($json.company || $json.email) + ')' }}",
+        "otherProperties": {
+          "projects": [
+            "REPLACE-ASANA-PROJECT-ID"
+          ],
+          "notes": "=Lead: {{ $json.name }} ({{ $json.email }})\nCompany: {{ $json.company }}\nTemperature: {{ $json.temperature }} (score {{ $json.score }})\nStatus: {{ $json.qualification_status }}\nOwner: {{ $json.owner_id }}\nDue since: {{ $json.follow_up_at }}\n\nSummary: {{ $json.summary }}\n\nCorrelation ID: {{ $json.correlation_id }}"
+        }
+      },
+      "id": "p1-sweep-asana",
+      "name": "Create Reminder Task",
+      "type": "n8n-nodes-base.asana",
+      "typeVersion": 1,
+      "position": [
+        320,
+        0
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "resource": "record",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE-AIRTABLE-BASE-ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "REPLACE-TABLE-ID",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "last_action_at": "={{ $now.toISO() }}",
+            "updated_at": "={{ $now.toISO() }}",
+            "id": "={{ $('Filter Unreminded').item.json.lead_id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "p1-sweep-mark",
+      "name": "Mark Reminder Sent",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        560,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const reminded = $input.all().length;\nreturn [{ json: { reminded_count: reminded, run_at: new Date().toISOString(), outcome: reminded === 0 ? 'no_due_followups' : 'reminders_sent' } }];"
+      },
+      "id": "p1-sweep-summary",
+      "name": "Build Sweep Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Daily 09:00 IST": {
+      "main": [
+        [
+          {
+            "node": "Get Due Follow-ups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Due Follow-ups": {
+      "main": [
+        [
+          {
+            "node": "Filter Unreminded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Unreminded": {
+      "main": [
+        [
+          {
+            "node": "Create Reminder Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Reminder Task": {
+      "main": [
+        [
+          {
+            "node": "Mark Reminder Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Reminder Sent": {
+      "main": [
+        [
+          {
+            "node": "Build Sweep Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "errorWorkflow": "REPLACE-SHARED-ERROR-WORKFLOW-ID"
+  },
+  "active": false
+}

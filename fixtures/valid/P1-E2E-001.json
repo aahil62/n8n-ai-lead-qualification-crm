@@ -1,0 +1,24 @@
+{
+  "test_id": "P1-E2E-001",
+  "scenario": "High-quality new lead",
+  "input": {
+    "source": "form",
+    "source_event_id": "form-9001",
+    "name": "Priya Sharma",
+    "email": "priya.sharma@northstar.example",
+    "phone": "+15550000001",
+    "company": "Northstar Growth Studio",
+    "message": "We need a 6-month retainer for lead gen automation. Budget around $12k, decision mine, ready to start next month.",
+    "consent_status": "known-opt-in",
+    "campaign": "q3-outbound",
+    "received_at": "2026-07-15T09:14:00+05:30",
+    "correlation_id": "p1-c-001",
+    "idempotency_key": "form:form-9001"
+  },
+  "expected": {
+    "lead": "created with score>=60 temperature=hot qualified=true",
+    "crm_sync_status": "pending before call then synced after verified HubSpot contact+deal IDs",
+    "outcome": "one contact + one deal upserted; owner alert sent; no duplicate on replay"
+  },
+  "status": "not_run_live"
+}

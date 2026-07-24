@@ -1,0 +1,22 @@
+{
+  "test_id": "P1-E2E-006",
+  "scenario": "Spam/newsletter",
+  "input": {
+    "source": "gmail",
+    "source_event_id": "gmail-5501",
+    "name": "Promo Bot",
+    "email": "no-reply@promo.example",
+    "company": null,
+    "message": "50% off all courses, limited time! Click here.",
+    "consent_status": "not-applicable",
+    "campaign": null,
+    "received_at": "2026-07-15T09:14:00+05:30",
+    "correlation_id": "p1-c-006",
+    "idempotency_key": "gmail:gmail-5501"
+  },
+  "expected": {
+    "intent": "spam_or_other",
+    "outcome": "stopped and audited; no reply, no deal, no task"
+  },
+  "status": "not_run_live"
+}

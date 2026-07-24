@@ -1,0 +1,640 @@
+{
+  "name": "P1-01 Lead Intake Adapters",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Northstar Lead Intake",
+        "formDescription": "Submit a sales enquiry. All data shown is fictional test data for the portfolio demonstration.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Name",
+              "required": true
+            },
+            {
+              "fieldLabel": "Email",
+              "required": true,
+              "fieldType": "email"
+            },
+            {
+              "fieldLabel": "Phone",
+              "required": false,
+              "fieldType": "text"
+            },
+            {
+              "fieldLabel": "Company",
+              "required": false,
+              "fieldType": "text"
+            },
+            {
+              "fieldLabel": "Message",
+              "required": true,
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Campaign",
+              "required": false,
+              "fieldType": "text"
+            },
+            {
+              "fieldLabel": "Consent",
+              "required": false,
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "known-opt-in"
+                  },
+                  {
+                    "option": "unknown"
+                  },
+                  {
+                    "option": "not-applicable"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "p1-intake-form-trigger",
+      "name": "Lead Intake Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        -220
+      ],
+      "webhookId": "p1-lead-intake-form"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "p1-lead-intake",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "p1-intake-webhook-trigger",
+      "name": "Lead Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        220
+      ],
+      "webhookId": "p1-lead-intake-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $input.first().json;\nconst now = new Date().toISOString();\nreturn [{\n  json: {\n    raw_source: 'form',\n    source: 'form',\n    source_event_id: String(j.submissionId || j.submission_id || j.formId || j.formSubmissionId || ''),\n    name: String(j.Name || j.name || '').trim(),\n    email: String(j.Email || j.email || '').trim().toLowerCase(),\n    phone: String(j.Phone || j.phone || '').trim() || null,\n    company: String(j.Company || j.company || '').trim() || null,\n    message: String(j.Message || j.message || j.Comments || j.comments || '').trim(),\n    consent_status: String(j.Consent || j.consent_status || j.consent || 'unknown').trim() || 'unknown',\n    campaign: String(j.Campaign || j.campaign || '').trim() || null,\n    owner_hint: String(j.Owner || j.owner_hint || '').trim() || null,\n    received_at: now\n  }\n}];"
+      },
+      "id": "p1-intake-normalize-form",
+      "name": "Normalize Form Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -220,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $input.first().json;\nconst body = j.body && typeof j.body === 'object' ? j.body : j;\nconst now = new Date().toISOString();\nreturn [{\n  json: {\n    raw_source: 'webhook',\n    source: String(body.source || 'webhook').toLowerCase(),\n    source_event_id: String(body.source_event_id || body.event_id || body.id || body.message_id || ''),\n    name: String(body.name || body.full_name || '').trim(),\n    email: String(body.email || body.email_address || '').trim().toLowerCase(),\n    phone: String(body.phone || body.phone_number || '').trim() || null,\n    company: String(body.company || body.organization || '').trim() || null,\n    message: String(body.message || body.notes || body.comments || '').trim(),\n    consent_status: String(body.consent_status || body.consent || 'unknown').trim() || 'unknown',\n    campaign: String(body.campaign || body.utm_campaign || '').trim() || null,\n    owner_hint: String(body.owner_hint || body.owner || '').trim() || null,\n    received_at: String(body.received_at || body.timestamp || now)\n  }\n}];"
+      },
+      "id": "p1-intake-normalize-webhook",
+      "name": "Normalize Webhook Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -220,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $input.first().json;\nconst allowedSources = ['form','webhook','gmail','other'];\nconst errors = [];\nconst email = j.email || '';\nconst emailOk = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email);\nif (!emailOk) errors.push('invalid_email');\nif (!j.name) errors.push('missing_name');\nif (!j.message || j.message.length < 2) errors.push('missing_message');\nconst payloadSize = JSON.stringify(j).length;\nif (payloadSize > 20000) errors.push('payload_too_large');\nconst source = allowedSources.includes(j.source) ? j.source : '';\nif (!source) errors.push('disallowed_source');\nconst hex = () => Math.floor((1 + Math.random()) * 0x100000000).toString(16).slice(1);\nconst correlation_id = hex() + hex() + '-' + hex() + '-' + hex() + '-' + hex() + '-' + hex() + hex() + hex();\nlet idempotencyKey;\nif (j.source_event_id) {\n  idempotencyKey = j.source + ':' + j.source_event_id;\n} else {\n  const raw = (j.email || '') + '|' + (j.message || '') + '|' + (j.source || '');\n  let h = 0x811c9dc5;\n  for (let i = 0; i < raw.length; i++) { h ^= raw.charCodeAt(i); h = (h * 0x01000193) >>> 0; }\n  idempotencyKey = j.source + ':content-' + h.toString(16);\n}\nconst valid = errors.length === 0;\nconst dedupFormula = valid ? '{idempotency_key} = \"' + idempotencyKey + '\"' : '';\nconst canonical = {\n  correlation_id,\n  idempotency_key: idempotencyKey,\n  source: source || j.source || 'other',\n  source_event_id: j.source_event_id || '',\n  received_at: j.received_at,\n  name: j.name,\n  email: email,\n  phone: j.phone || null,\n  company: j.company || null,\n  message: j.message || '',\n  consent_status: j.consent_status || 'unknown',\n  campaign: j.campaign || null,\n  owner_hint: j.owner_hint || null\n};\nreturn [{ json: { valid, errors, dedup_formula: dedupFormula, lead: canonical } }];"
+      },
+      "id": "p1-intake-validate",
+      "name": "Validate & Build Canonical Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        40,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "p1-intake-valid-if",
+      "name": "Lead Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        280,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "resource": "record",
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE-AIRTABLE-BASE-ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "REPLACE-TABLE-ID",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "correlation_id": "={{ $('Validate & Build Canonical Lead').item.json.lead.correlation_id }}",
+            "project_id": "P1",
+            "workflow_id": "P1-01 Lead Intake Adapters",
+            "failed_stage": "intake_validation",
+            "sanitized_input": "={{ JSON.stringify($('Validate & Build Canonical Lead').item.json.lead).slice(0, 2000) }}",
+            "error_code": "={{ $('Validate & Build Canonical Lead').item.json.errors.join(';') || 'validation_failed' }}",
+            "retryable": false,
+            "attempts": 0,
+            "status": "rejected",
+            "created_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "p1-intake-reject",
+      "name": "Reject Invalid Lead",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        520,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "resource": "record",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE-AIRTABLE-BASE-ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "REPLACE-TABLE-ID",
+          "mode": "id"
+        },
+        "filterByFormula": "={{ $json.dedup_formula }}",
+        "limit": 1,
+        "options": {},
+        "returnAll": false
+      },
+      "id": "p1-intake-dedup",
+      "name": "Dedup Check",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        520,
+        -220
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ !!$('Dedup Check').first().json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "p1-intake-exists-if",
+      "name": "Lead Already Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        760,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rec = $('Dedup Check').first().json;\nconst fields = rec.fields || rec;\nconst lead = $('Validate & Build Canonical Lead').item.json.lead;\nreturn [{\n  json: {\n    outcome: 'duplicate',\n    lead_id: rec.id || fields.lead_id || '',\n    correlation_id: fields.correlation_id || lead.correlation_id,\n    idempotency_key: fields.idempotency_key || lead.idempotency_key,\n    qualification_status: fields.qualification_status || 'received',\n    crm_sync_status: fields.crm_sync_status || 'pending',\n    deal_eligible: false,\n    message: 'Lead already exists; no duplicate created.'\n  }\n}];"
+      },
+      "id": "p1-intake-existing",
+      "name": "Return Existing State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "resource": "record",
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE-AIRTABLE-BASE-ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "REPLACE-TABLE-ID",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "correlation_id": "={{ $('Validate & Build Canonical Lead').item.json.lead.correlation_id }}",
+            "idempotency_key": "={{ $('Validate & Build Canonical Lead').item.json.lead.idempotency_key }}",
+            "source": "={{ $('Validate & Build Canonical Lead').item.json.lead.source }}",
+            "source_event_id": "={{ $('Validate & Build Canonical Lead').item.json.lead.source_event_id }}",
+            "name": "={{ $('Validate & Build Canonical Lead').item.json.lead.name }}",
+            "email": "={{ $('Validate & Build Canonical Lead').item.json.lead.email }}",
+            "phone": "={{ $('Validate & Build Canonical Lead').item.json.lead.phone }}",
+            "company": "={{ $('Validate & Build Canonical Lead').item.json.lead.company }}",
+            "message": "={{ $('Validate & Build Canonical Lead').item.json.lead.message }}",
+            "consent_status": "={{ $('Validate & Build Canonical Lead').item.json.lead.consent_status }}",
+            "campaign": "={{ $('Validate & Build Canonical Lead').item.json.lead.campaign }}",
+            "owner_hint": "={{ $('Validate & Build Canonical Lead').item.json.lead.owner_hint }}",
+            "qualification_status": "received",
+            "crm_sync_status": "pending",
+            "review_status": "none",
+            "received_at": "={{ $('Validate & Build Canonical Lead').item.json.lead.received_at }}",
+            "created_at": "={{ $now.toISO() }}",
+            "updated_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "p1-intake-write-lead",
+      "name": "Write New Lead",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        1000,
+        -120
+      ],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const rec = $input.first().json;\nconst fields = rec.fields || rec;\nconst lead = $('Validate & Build Canonical Lead').item.json.lead;\nreturn [{\n  json: {\n    ...lead,\n    lead_id: rec.id || fields.id || '',\n    qualification_status: 'received',\n    crm_sync_status: 'pending'\n  }\n}];"
+      },
+      "id": "p1-intake-prep-core",
+      "name": "Prepare Core Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE-SUBWORKFLOW-ID",
+          "mode": "id",
+          "cachedResultName": "P1-02 Qualification Core"
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "id": "p1-intake-call-core",
+      "name": "Call Qualification Core",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        1480,
+        -120
+      ],
+      "notes": "After import, bind this node to P1-02 Qualification Core workflow ID. The public export uses a placeholder workflow ID."
+    },
+    {
+      "parameters": {
+        "jsCode": "const incoming = $input.first().json;\nreturn [{ json: { ...incoming, intake_status: incoming.outcome === 'duplicate' ? 'duplicate' : 'processed' } }];"
+      },
+      "id": "p1-intake-result",
+      "name": "Build Intake Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1720,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.deal_eligible }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "p1-intake-qualified-if",
+      "name": "Qualified for CRM?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1960,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE-SUBWORKFLOW-ID",
+          "mode": "id",
+          "cachedResultName": "P1-03 CRM Handoff"
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "id": "p1-intake-call-crm",
+      "name": "Call CRM Handoff",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        2200,
+        -360
+      ],
+      "notes": "After import, bind this node to P1-03 CRM Handoff workflow ID. Only called for deal_eligible (qualified) leads; existing_customer/spam/low-confidence never reach this node."
+    },
+    {
+      "parameters": {
+        "jsCode": "const incoming = $input.first().json;\nlet merged = incoming;\nif (incoming.outcome !== 'duplicate' && incoming.deal_eligible !== false) {\n  const crm = $('Call CRM Handoff').first().json || {};\n  merged = { ...incoming, crm_handoff: crm };\n}\nlet final_status = 'no_crm_handoff';\nif (merged.outcome === 'duplicate') final_status = 'duplicate_no_action';\nelse if (merged.crm_sync_status === 'synced' || merged.outcome === 'crm_handoff_success') final_status = 'crm_handoff_complete';\nelse if (merged.crm_sync_status === 'failed' || merged.outcome === 'crm_handoff_failed') final_status = 'crm_handoff_failed';\nreturn [{ json: { ...merged, final_status } }];"
+      },
+      "id": "p1-intake-final",
+      "name": "Final Intake Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        -240
+      ]
+    }
+  ],
+  "connections": {
+    "Lead Intake Form": {
+      "main": [
+        [
+          {
+            "node": "Normalize Form Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Webhook Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Form Lead": {
+      "main": [
+        [
+          {
+            "node": "Validate & Build Canonical Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Webhook Lead": {
+      "main": [
+        [
+          {
+            "node": "Validate & Build Canonical Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Build Canonical Lead": {
+      "main": [
+        [
+          {
+            "node": "Lead Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Valid?": {
+      "main": [
+        [
+          {
+            "node": "Dedup Check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Invalid Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dedup Check": {
+      "main": [
+        [
+          {
+            "node": "Lead Already Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Already Exists?": {
+      "main": [
+        [
+          {
+            "node": "Return Existing State",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Write New Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Existing State": {
+      "main": [
+        [
+          {
+            "node": "Build Intake Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write New Lead": {
+      "main": [
+        [
+          {
+            "node": "Prepare Core Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Core Input": {
+      "main": [
+        [
+          {
+            "node": "Call Qualification Core",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Qualification Core": {
+      "main": [
+        [
+          {
+            "node": "Build Intake Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Intake Result": {
+      "main": [
+        [
+          {
+            "node": "Qualified for CRM?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qualified for CRM?": {
+      "main": [
+        [
+          {
+            "node": "Call CRM Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Final Intake Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call CRM Handoff": {
+      "main": [
+        [
+          {
+            "node": "Final Intake Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "REPLACE-SHARED-ERROR-WORKFLOW-ID"
+  },
+  "active": false
+}

@@ -1,0 +1,244 @@
+{
+  "name": "P1-05 Weekly Pipeline Report",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerOnDayOfWeek": 1,
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "p1-report-trigger",
+      "name": "Weekly Monday 09:00 IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "resource": "record",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "REPLACE-AIRTABLE-BASE-ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "REPLACE-TABLE-ID",
+          "mode": "id"
+        },
+        "limit": 100,
+        "options": {},
+        "returnAll": false
+      },
+      "id": "p1-report-get-leads",
+      "name": "Get All Leads",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        -260,
+        0
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => { const f = i.json.fields || i.json; return { id: i.json.id, ...f }; });\nconst today = new Date().toISOString().slice(0, 10);\nconst countBy = (field) => { const m = {}; for (const r of rows) { const v = r[field] || 'unknown'; m[v] = (m[v] || 0) + 1; } return m; };\nconst temperature = countBy('temperature');\nconst qualification_status = countBy('qualification_status');\nconst crm_sync_status = countBy('crm_sync_status');\nconst failures = rows.filter(r => r.crm_sync_status === 'failed').length;\nconst dueFollowUps = rows.filter(r => r.follow_up_at && String(r.follow_up_at).slice(0, 10) <= today).length;\nconst total = rows.length;\nreturn [{ json: { total, temperature, qualification_status, crm_sync_status, failures, due_follow_ups: dueFollowUps, generated_at: new Date().toISOString() } }];"
+      },
+      "id": "p1-report-aggregate",
+      "name": "Aggregate Pipeline",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are writing a short narrative summary of a weekly sales pipeline report for Northstar Growth Studio. Use ONLY the numbers provided below. Do not invent, estimate, or round any value. If a number is zero, say so.\n\nAggregates (deterministic, computed from stored leads):\n{{ JSON.stringify($('Aggregate Pipeline').item.json) }}\n\nWrite 3-4 sentences of narrative. Do not list numbers that are not in the aggregates. Do not mention conversion rates or revenue unless they appear above.",
+        "batching": {}
+      },
+      "id": "p1-report-ai-chain",
+      "name": "AI Summary of Aggregates",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        220,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "id": "p1-report-model",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        100,
+        320
+      ],
+      "notes": "Bind an OpenAI-compatible credential after import. AI only narrates the deterministic aggregates; it cannot invent values."
+    },
+    {
+      "parameters": {
+        "jsCode": "const agg = $('Aggregate Pipeline').item.json;\nconst ai = $input.first().json;\nconst narrative = (ai && (ai.text || ai.output || (ai.json && ai.json.text))) || '';\nconst lines = [];\nlines.push('Weekly Pipeline Report — Northstar Growth Studio');\nlines.push('Generated: ' + agg.generated_at);\nlines.push('');\nlines.push('TOTAL LEADS: ' + agg.total);\nlines.push('By temperature: ' + JSON.stringify(agg.temperature));\nlines.push('By qualification_status: ' + JSON.stringify(agg.qualification_status));\nlines.push('By crm_sync_status: ' + JSON.stringify(agg.crm_sync_status));\nlines.push('CRM sync failures: ' + agg.failures);\nlines.push('Due follow-ups: ' + agg.due_follow_ups);\nlines.push('');\nlines.push('Narrative:');\nlines.push(narrative || '(AI summary unavailable; aggregates above are authoritative.)');\nreturn [{ json: { report_text: lines.join('\\n'), aggregates: agg, narrative } }];"
+      },
+      "id": "p1-report-build",
+      "name": "Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "accessToken",
+        "resource": "task",
+        "operation": "create",
+        "workspace": "REPLACE-ASANA-WORKSPACE-ID",
+        "name": "={{ 'Weekly Pipeline Report — ' + $now.toFormat('yyyy-MM-dd') }}",
+        "otherProperties": {
+          "projects": [
+            "REPLACE-ASANA-PROJECT-ID"
+          ],
+          "notes": "={{ $json.report_text }}"
+        }
+      },
+      "id": "p1-report-asana",
+      "name": "Post Report Task",
+      "type": "n8n-nodes-base.asana",
+      "typeVersion": 1,
+      "position": [
+        700,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { report_posted: true, posted_at: new Date().toISOString(), total_leads: $('Aggregate Pipeline').item.json.total } }];"
+      },
+      "id": "p1-report-confirm",
+      "name": "Confirm Report Sent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Weekly Monday 09:00 IST": {
+      "main": [
+        [
+          {
+            "node": "Get All Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Leads": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Pipeline": {
+      "main": [
+        [
+          {
+            "node": "AI Summary of Aggregates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Summary of Aggregates": {
+      "main": [
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Report": {
+      "main": [
+        [
+          {
+            "node": "Post Report Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Report Task": {
+      "main": [
+        [
+          {
+            "node": "Confirm Report Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Summary of Aggregates",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "errorWorkflow": "REPLACE-SHARED-ERROR-WORKFLOW-ID"
+  },
+  "active": false
+}

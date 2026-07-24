@@ -1,0 +1,22 @@
+{
+  "test_id": "P1-E2E-005",
+  "scenario": "Existing customer request",
+  "input": {
+    "source": "gmail",
+    "source_event_id": "gmail-5500",
+    "name": "Anita Rao",
+    "email": "anita.rao@northstar.example",
+    "company": "Northstar Growth Studio",
+    "message": "We have an issue with our current automation, need support help.",
+    "consent_status": "not-applicable",
+    "campaign": null,
+    "received_at": "2026-07-15T09:14:00+05:30",
+    "correlation_id": "p1-c-005",
+    "idempotency_key": "gmail:gmail-5500"
+  },
+  "expected": {
+    "intent": "existing_customer",
+    "outcome": "routed to support queue; NO new sales deal created"
+  },
+  "status": "not_run_live"
+}

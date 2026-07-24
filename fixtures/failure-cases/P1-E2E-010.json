@@ -1,0 +1,22 @@
+{
+  "test_id": "P1-E2E-010",
+  "scenario": "CRM 401",
+  "input": {
+    "source": "form",
+    "source_event_id": "form-9004",
+    "name": "Neha Gupta",
+    "email": "neha@northstar.example",
+    "company": "Gupta Ventures",
+    "message": "Budget $20k, decision maker, start next week.",
+    "consent_status": "known-opt-in",
+    "campaign": null,
+    "received_at": "2026-07-15T09:14:00+05:30",
+    "correlation_id": "p1-c-010",
+    "idempotency_key": "form:form-9004"
+  },
+  "expected": {
+    "crm": "returns 401",
+    "outcome": "immediate configuration alert; no repeated retry storm; crm_sync_status=failed"
+  },
+  "status": "not_run_live"
+}

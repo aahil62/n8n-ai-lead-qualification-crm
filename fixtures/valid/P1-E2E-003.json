@@ -1,0 +1,23 @@
+{
+  "test_id": "P1-E2E-003",
+  "scenario": "Cold lead",
+  "input": {
+    "source": "form",
+    "source_event_id": "form-9002",
+    "name": "Riya Mehta",
+    "email": "riya.mehta@northstar.example",
+    "company": "Example LLC",
+    "message": "Just researching automation tools for now, no timeline.",
+    "consent_status": "unknown",
+    "campaign": null,
+    "received_at": "2026-07-15T09:14:00+05:30",
+    "correlation_id": "p1-c-003",
+    "idempotency_key": "form:form-9002"
+  },
+  "expected": {
+    "lead": "created score<cold threshold temperature=cold",
+    "crm_sync_status": "never synced; no deal and no sales alert",
+    "outcome": "audited correctly and stopped"
+  },
+  "status": "not_run_live"
+}

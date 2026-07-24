@@ -1,0 +1,22 @@
+{
+  "test_id": "P1-E2E-009",
+  "scenario": "CRM 429/5xx",
+  "input": {
+    "source": "form",
+    "source_event_id": "form-9003",
+    "name": "Karan Singh",
+    "email": "karan@northstar.example",
+    "company": "Singha Brands",
+    "message": "Ready to buy, budget $15k, start immediately, I am the CEO.",
+    "consent_status": "known-opt-in",
+    "campaign": null,
+    "received_at": "2026-07-15T09:14:00+05:30",
+    "correlation_id": "p1-c-009",
+    "idempotency_key": "form:form-9003"
+  },
+  "expected": {
+    "crm": "returns 429/5xx",
+    "outcome": "capped retry; success OR dead-letter with replay data; crm_sync_status never falsely synced"
+  },
+  "status": "not_run_live"
+}

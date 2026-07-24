@@ -1,0 +1,23 @@
+{
+  "test_id": "P1-E2E-012",
+  "scenario": "Notification failure after CRM success",
+  "input": {
+    "source": "form",
+    "source_event_id": "form-9005",
+    "name": "Sara Khan",
+    "email": "sara@northstar.example",
+    "company": "Khan Digital",
+    "message": "Budget $11k, start in 3 weeks, I decide.",
+    "consent_status": "known-opt-in",
+    "campaign": null,
+    "received_at": "2026-07-15T09:14:00+05:30",
+    "correlation_id": "p1-c-012",
+    "idempotency_key": "form:form-9005"
+  },
+  "expected": {
+    "crm": "deal created and verified",
+    "notification": "fails after CRM success",
+    "outcome": "deal remains recorded (crm_sync_status=synced); notification marked failed and independently replayable"
+  },
+  "status": "not_run_live"
+}

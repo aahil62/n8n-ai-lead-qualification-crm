@@ -1,0 +1,22 @@
+{
+  "test_id": "P1-E2E-013",
+  "scenario": "Natural-language follow-up date",
+  "input": {
+    "source": "gmail",
+    "source_event_id": "gmail-5503",
+    "name": "Dev Patel",
+    "email": "dev.patel@northstar.example",
+    "company": "Acme Co",
+    "message": "Check back with me in two weeks, we are reviewing internally.",
+    "consent_status": "known-opt-in",
+    "campaign": null,
+    "received_at": "2026-07-15T09:14:00+05:30",
+    "correlation_id": "p1-c-013",
+    "idempotency_key": "gmail:gmail-5503"
+  },
+  "expected": {
+    "follow_up_at": "timezone-aware date (Asia/Kolkata) 14 days from received_at",
+    "outcome": "stored and included exactly once when due; no duplicate reminder"
+  },
+  "status": "not_run_live"
+}
