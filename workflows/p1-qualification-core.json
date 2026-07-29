@@ -76,7 +76,7 @@
       ],
       "retryOnFail": true,
       "maxTries": 2,
-      "continueOnFail": true
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {

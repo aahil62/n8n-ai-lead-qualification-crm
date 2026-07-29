@@ -95,7 +95,6 @@
         0
       ],
       "notes": "HubSpot OAuth2 credential bound by a controlled test run. neverError + fullResponse so status codes are classified in code, not thrown.",
-      "continueOnFail": true,
       "onError": "continueRegularOutput"
     },
     {
@@ -204,7 +203,6 @@
       "maxTries": 3,
       "waitBetweenTries": 5000,
       "notes": "Capped retry for transient 429/5xx. Auth (401/403) is not retried because neverError returns the status to the verifier instead of throwing.",
-      "continueOnFail": true,
       "onError": "continueRegularOutput"
     },
     {
@@ -234,7 +232,6 @@
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 5000,
-      "continueOnFail": true,
       "onError": "continueRegularOutput"
     },
     {
@@ -275,7 +272,6 @@
         0
       ],
       "notes": "Company upsert so crm_company_id is a verified external ID, not a placeholder.",
-      "continueOnFail": true,
       "onError": "continueRegularOutput"
     },
     {
@@ -350,7 +346,6 @@
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 5000,
-      "continueOnFail": true,
       "onError": "continueRegularOutput"
     },
     {
@@ -407,7 +402,6 @@
       "maxTries": 3,
       "waitBetweenTries": 5000,
       "notes": "Deal is associated with the verified contact (and company when present). Live-verified HubSpot associationTypeIds: 3 (deal-to-contact) and 5 (deal-to-company).",
-      "continueOnFail": true,
       "onError": "continueRegularOutput"
     },
     {
@@ -523,8 +517,8 @@
         3660,
         -160
       ],
-      "continueOnFail": true,
-      "notes": "Alerts the routed sales owner. continueOnFail so a notification failure cannot erase the already-synced deal."
+      "onError": "continueRegularOutput",
+      "notes": "Alerts the routed sales owner. The regular-output error policy means a notification failure cannot erase the already-synced deal."
     },
     {
       "parameters": {
