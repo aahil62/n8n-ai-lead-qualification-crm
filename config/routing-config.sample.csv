@@ -1,0 +1,4 @@
+route,min_score,owner,follow_up_days,active
+qualified,70,sales-owner,0,true
+nurture,30,nurture-owner,3,true
+review,0,review-owner,0,true

@@ -1,14 +1,22 @@
 # AI Lead Qualification, CRM and Follow-Up System
 
-Production-minded n8n lead qualification, HubSpot CRM handoff, follow-up and audit workflows.
+[![Validate public workflow package](https://github.com/aahil62/n8n-ai-lead-qualification-crm/actions/workflows/validate.yml/badge.svg)](https://github.com/aahil62/n8n-ai-lead-qualification-crm/actions/workflows/validate.yml)
 
-## Business outcome
+Production-minded n8n lead qualification, HubSpot CRM handoff, follow-up and audit workflows. Qualifies inbound leads consistently, routes uncertain cases to review, and creates CRM records only after deterministic checks pass.
 
-Qualifies inbound leads consistently, routes uncertain cases to review, and creates CRM records only after deterministic checks pass.
+## Verified proof
 
-## Stack
+| Evidence | Verified result |
+|---|---|
+| Runtime path | Representative end-to-end path passed |
+| External systems | n8n, Airtable, HubSpot test account, Asana, and an OpenAI-compatible model endpoint |
+| AI boundary | AI extracts structured buying signals; deterministic scoring and routing rules control CRM actions. |
+| Duplicate behavior | Designed and fixture-covered; a public live duplicate-replay claim is not made. |
+| Production boundary | Controlled test environment using fictional data |
 
-n8n, HubSpot, Airtable, Asana, OpenAI-compatible models, JavaScript, webhooks
+A representative lead path passed through intake, AI signal extraction, deterministic scoring, Airtable state management, HubSpot contact/company/deal handling, and an Asana owner notification.
+
+This is representative live-path evidence, not a claim that every production scenario has passed.
 
 ## Architecture
 
@@ -29,6 +37,25 @@ flowchart LR
     K -. failure .-> N["Audit and dead-letter"]
 ```
 
+## Business process and reliability
+
+- canonical input normalization and explicit validation
+- idempotency or stable record mapping before side effects
+- deterministic rules around irreversible business actions
+- confidence and human-review gates where AI is used
+- capped retries for transient failures
+- audit records, dead-letter handling, and replay paths
+- destination verification before a record is marked successful
+- inactive workflow exports with credentials removed
+
+## Test evidence
+
+- [Test report](docs/test-report.md)
+- [Test plan and remaining matrix](docs/test-plan.md)
+- [Verification boundaries](docs/verification.md)
+
+15 lead scenarios covering valid, duplicate, low-confidence, prompt-injection, CRM failure, and follow-up cases.
+
 ## Workflow package
 
 | ID | Workflow | Responsibility |
@@ -40,22 +67,15 @@ flowchart LR
 | P1-05 | [`p1-weekly-pipeline-report.json`](workflows/p1-weekly-pipeline-report.json) | Deterministic pipeline aggregates and weekly delivery |
 | P0-99 | [`shared-error-handler.json`](workflows/shared-error-handler.json) | Shared audit, alert, redaction, and dead-letter handling |
 
-## Reliability controls
 
-- canonical input normalization and explicit validation
-- idempotency or stable record mapping before side effects
-- deterministic rules around irreversible business actions
-- confidence and human-review gates where AI is used
-- capped retries for transient failures
-- audit records, dead-letter handling, and replay paths
-- destination verification before a record is marked successful
-- inactive workflow exports with credentials removed
+## Model-provider status
 
-## Verified scope
+| Provider | Status |
+|---|---|
+| Groq-hosted OpenAI-compatible endpoint | Representative live path verified |
+| OpenAI | Architecture-compatible; test before claiming verified |
+| Anthropic/Claude | Not verified in this package |
 
-A representative lead path passed through intake, AI signal extraction, deterministic scoring, Airtable state management, HubSpot contact/company/deal handling, and an Asana owner notification.
-
-This is representative live-path evidence, not a claim that every production scenario has passed.
 
 ## Known limit
 
@@ -66,17 +86,20 @@ The remaining replay, malformed-input, rate-limit, and notification-failure matr
 - [Architecture](docs/architecture.md)
 - [Data contract](docs/data-contract.md)
 - [Setup guide](docs/setup.md)
+- [Placeholder map](docs/placeholder-map.md)
 - [Test plan](docs/test-plan.md)
 - [Test report](docs/test-report.md)
 - [Verification and limitations](docs/verification.md)
 - [Sanitized fixtures](fixtures)
+- [Configuration samples](config)
+- [Repository usage terms](USAGE.md)
 
 
 ## Import and test
 
 1. Import `workflows/shared-error-handler.json` into a test n8n instance.
 2. Import the project workflows.
-3. Replace every `REPLACE-...` placeholder and reconnect sub-workflow IDs.
+3. Follow [the placeholder map](docs/placeholder-map.md) and reconnect sub-workflow IDs.
 4. Create credentials inside n8n. Do not place secrets in workflow JSON.
 5. Validate every workflow and keep it inactive.
 6. Run the fixtures against disposable accounts before enabling schedules or webhooks.

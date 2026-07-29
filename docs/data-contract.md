@@ -65,7 +65,7 @@ Additional operational fields used by the workflows: `message`, `name`, `email`,
 
 ## 3. Configuration tables
 
-### `scoring_config` (Airtable table `REPLACE-AIRTABLE-TABLE-ID`)
+### `scoring_config` (Airtable table `REPLACE-SCORING-CONFIG-TABLE-ID`)
 
 ```text
 client_id, rule_id, field, operator, expected_value, points,
@@ -87,7 +87,7 @@ Example seed (illustrative):
 | decision_authority | regex | `owner\|founder\|director\|head\|vp\|c[ -]?level\|ceo\|cfo` | 25 | true |
 | readiness | regex | `ready\|now\|immediate\|asap\|this (week\|month)\|approved\|purchas` | 15 | true |
 
-### `routing_config` (Airtable table `REPLACE-AIRTABLE-TABLE-ID`)
+### `routing_config` (Airtable table `REPLACE-ROUTING-CONFIG-TABLE-ID`)
 
 ```text
 client_id, route_id, condition, owner_id, notification_channel,
@@ -102,7 +102,7 @@ calendar_link, active
 
 ## 4. Shared tables (§8.2)
 
-### `execution_audit` (Airtable table `REPLACE-AIRTABLE-TABLE-ID`)
+### `execution_audit` (Airtable table `REPLACE-EXECUTION-AUDIT-TABLE-ID`)
 
 ```text
 correlation_id, project_id, workflow_id, execution_id, stage,
@@ -112,7 +112,7 @@ error_code, sanitized_error, replay_of
 
 Written by P0-99 Shared Error Handler on workflow-level failures.
 
-### `dead_letter` (Airtable table `REPLACE-AIRTABLE-TABLE-ID`)
+### `dead_letter` (Airtable table `REPLACE-DEAD-LETTER-TABLE-ID`)
 
 ```text
 dead_letter_id, correlation_id, project_id, workflow_id,
@@ -122,7 +122,7 @@ attempts, status, created_at, resolved_at, replay_execution_id
 
 Written by P1-01 (rejected invalid leads), P1-03 (CRM failures and notification failures), and P0-99. `retryable` is `true` for transient 429/5xx and notification failures, `false` for auth and validation errors.
 
-### `review_queue` (Airtable table `REPLACE-AIRTABLE-TABLE-ID`)
+### `review_queue` (Airtable table `REPLACE-REVIEW-QUEUE-TABLE-ID`)
 
 ```text
 review_id, message_id, reason, draft_text, status, assigned_to,
@@ -137,12 +137,12 @@ Base: `REPLACE-AIRTABLE-BASE-ID` ("Portfolio Automation OS").
 
 | Table | ID |
 |---|---|
-| leads | `REPLACE-AIRTABLE-TABLE-ID` |
-| scoring_config | `REPLACE-AIRTABLE-TABLE-ID` |
-| routing_config | `REPLACE-AIRTABLE-TABLE-ID` |
-| execution_audit | `REPLACE-AIRTABLE-TABLE-ID` |
-| dead_letter | `REPLACE-AIRTABLE-TABLE-ID` |
-| review_queue | `REPLACE-AIRTABLE-TABLE-ID` |
+| leads | `REPLACE-LEADS-TABLE-ID` |
+| scoring_config | `REPLACE-SCORING-CONFIG-TABLE-ID` |
+| routing_config | `REPLACE-ROUTING-CONFIG-TABLE-ID` |
+| execution_audit | `REPLACE-EXECUTION-AUDIT-TABLE-ID` |
+| dead_letter | `REPLACE-DEAD-LETTER-TABLE-ID` |
+| review_queue | `REPLACE-REVIEW-QUEUE-TABLE-ID` |
 
 ## 6. HubSpot CRM objects (P1-03)
 

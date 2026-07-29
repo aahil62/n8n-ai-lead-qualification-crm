@@ -16,7 +16,7 @@
   },
   "expected": {
     "intent": "existing_customer",
-    "outcome": "routed to support queue; NO new sales deal created"
+    "outcome": "classified as existing_customer; NO new sales deal created; support adapter optional"
   },
   "status": "not_run_live"
 }

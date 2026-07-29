@@ -169,7 +169,7 @@
         },
         "table": {
           "__rl": true,
-          "value": "REPLACE-TABLE-ID",
+          "value": "REPLACE-DEAD-LETTER-TABLE-ID",
           "mode": "id"
         },
         "columns": {
@@ -212,7 +212,7 @@
         },
         "table": {
           "__rl": true,
-          "value": "REPLACE-TABLE-ID",
+          "value": "REPLACE-LEADS-TABLE-ID",
           "mode": "id"
         },
         "filterByFormula": "={{ $json.dedup_formula }}",
@@ -288,7 +288,7 @@
         },
         "table": {
           "__rl": true,
-          "value": "REPLACE-TABLE-ID",
+          "value": "REPLACE-LEADS-TABLE-ID",
           "mode": "id"
         },
         "columns": {
@@ -346,7 +346,7 @@
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "value": "REPLACE-SUBWORKFLOW-ID",
+          "value": "REPLACE-P1-QUALIFICATION-WORKFLOW-ID",
           "mode": "id",
           "cachedResultName": "P1-02 Qualification Core"
         },
@@ -413,7 +413,7 @@
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "value": "REPLACE-SUBWORKFLOW-ID",
+          "value": "REPLACE-P1-CRM-HANDOFF-WORKFLOW-ID",
           "mode": "id",
           "cachedResultName": "P1-03 CRM Handoff"
         },

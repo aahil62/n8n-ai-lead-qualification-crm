@@ -16,7 +16,7 @@ Form / Webhook / Email Adapter
           → Configurable Deterministic Score
           → Route by Intent and Qualification
               ├─ qualified → CRM Upsert → Verify IDs → Alert → Confirmation/Booking
-              ├─ nurture → Ask Approved Missing Questions → Set Follow-Up
+              ├─ nurture → Store Missing Signals → Schedule Owner Follow-Up
               ├─ existing customer → Support Queue, not Sales Deal
               └─ spam/other → Audit and Stop
   → Weekly Pipeline Analytics

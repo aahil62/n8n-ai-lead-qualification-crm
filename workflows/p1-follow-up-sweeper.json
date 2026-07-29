@@ -35,7 +35,7 @@
         },
         "table": {
           "__rl": true,
-          "value": "REPLACE-TABLE-ID",
+          "value": "REPLACE-LEADS-TABLE-ID",
           "mode": "id"
         },
         "filterByFormula": "AND({follow_up_at} IS NOT BLANK(), DATETIME_DIFF({follow_up_at}, TODAY(), 'days') <= 0)",
@@ -102,7 +102,7 @@
         },
         "table": {
           "__rl": true,
-          "value": "REPLACE-TABLE-ID",
+          "value": "REPLACE-LEADS-TABLE-ID",
           "mode": "id"
         },
         "columns": {

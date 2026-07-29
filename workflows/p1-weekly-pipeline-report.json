@@ -36,7 +36,7 @@
         },
         "table": {
           "__rl": true,
-          "value": "REPLACE-TABLE-ID",
+          "value": "REPLACE-LEADS-TABLE-ID",
           "mode": "id"
         },
         "limit": 100,

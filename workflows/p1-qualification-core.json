@@ -28,7 +28,7 @@
         },
         "table": {
           "__rl": true,
-          "value": "REPLACE-TABLE-ID",
+          "value": "REPLACE-LEADS-TABLE-ID",
           "mode": "id"
         },
         "filterByFormula": "={{ `{idempotency_key} = \"${$json.idempotency_key}\"` }}",
@@ -170,7 +170,7 @@
         },
         "table": {
           "__rl": true,
-          "value": "REPLACE-TABLE-ID",
+          "value": "REPLACE-REVIEW-QUEUE-TABLE-ID",
           "mode": "id"
         },
         "columns": {
@@ -212,7 +212,7 @@
         },
         "table": {
           "__rl": true,
-          "value": "REPLACE-TABLE-ID",
+          "value": "REPLACE-LEADS-TABLE-ID",
           "mode": "id"
         },
         "columns": {
@@ -270,7 +270,7 @@
         },
         "table": {
           "__rl": true,
-          "value": "REPLACE-TABLE-ID",
+          "value": "REPLACE-SCORING-CONFIG-TABLE-ID",
           "mode": "id"
         },
         "limit": 100,
@@ -312,7 +312,7 @@
         },
         "table": {
           "__rl": true,
-          "value": "REPLACE-TABLE-ID",
+          "value": "REPLACE-ROUTING-CONFIG-TABLE-ID",
           "mode": "id"
         },
         "limit": 100,
@@ -354,7 +354,7 @@
         },
         "table": {
           "__rl": true,
-          "value": "REPLACE-TABLE-ID",
+          "value": "REPLACE-LEADS-TABLE-ID",
           "mode": "id"
         },
         "columns": {

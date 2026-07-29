@@ -2,18 +2,24 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
-const expectedWorkflows = ["p1-lead-intake.json","p1-qualification-core.json","p1-crm-handoff.json","p1-follow-up-sweeper.json","p1-weekly-pipeline-report.json","shared-error-handler.json"];
+const expectedWorkflows = ["workflows/p1-lead-intake.json","workflows/p1-qualification-core.json","workflows/p1-crm-handoff.json","workflows/p1-follow-up-sweeper.json","workflows/p1-weekly-pipeline-report.json","workflows/shared-error-handler.json"];
 const required = [
   "README.md",
   "SECURITY.md",
   "docs/architecture.md",
   "docs/data-contract.md",
   "docs/setup.md",
+  "docs/placeholder-map.md",
   "docs/test-plan.md",
   "docs/test-report.md",
   "docs/verification.md",
-  
-  ...expectedWorkflows.map((file) => `workflows/${file}`),
+  "config/airtable-schema.md",
+  "config/README.md",
+  "USAGE.md",
+  "config/scoring-config.sample.csv", "config/routing-config.sample.csv",
+
+
+  ...expectedWorkflows,
 ];
 
 let failures = 0;
@@ -28,9 +34,10 @@ for (const relative of required) {
 
 const secretPattern = /(sk-[A-Za-z0-9]{16,}|Bearer\s+[A-Za-z0-9._-]{8,}|password\s*[:=]\s*["']?[^\s"']{6,}|api[_-]?key\s*[:=]\s*["']?[^\s"']{8,})/i;
 const privateIdPattern = /(?:app|tbl|rec)[0-9A-Za-z]{14,}|\b\d{12,}\b/;
+const productionWebhookPattern = /https?:\/\/[^\s"'<>]+\/(?:webhook|webhook-test)\//i;
+const placeholdersInWorkflows = new Set();
 
-for (const file of expectedWorkflows) {
-  const relative = `workflows/${file}`;
+for (const relative of expectedWorkflows) {
   const full = path.join(root, relative);
   let raw;
   let workflow;
@@ -46,6 +53,8 @@ for (const file of expectedWorkflows) {
   if (workflow.id || workflow.versionId) fail(`${relative} contains an account-specific workflow ID`);
   if (secretPattern.test(raw)) fail(`${relative} contains a secret-like value`);
   if (privateIdPattern.test(raw)) fail(`${relative} contains a known private resource ID`);
+  if (productionWebhookPattern.test(raw)) fail(`${relative} contains an explicit webhook URL`);
+  for (const match of raw.matchAll(/REPLACE-[A-Z0-9-]+/g)) placeholdersInWorkflows.add(match[0]);
 
   const ids = new Set();
   const names = new Set();
@@ -69,6 +78,34 @@ for (const file of expectedWorkflows) {
   }
 }
 
+function collectWorkflowJson(dir) {
+  const files = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) files.push(...collectWorkflowJson(full));
+    else if (entry.name.endsWith(".json")) files.push(path.relative(root, full));
+  }
+  return files.sort();
+}
+
+const actualWorkflows = collectWorkflowJson(path.join(root, "workflows"));
+for (const relative of actualWorkflows) {
+  if (!expectedWorkflows.includes(relative)) fail(`undocumented workflow file: ${relative}`);
+}
+for (const relative of expectedWorkflows) {
+  if (!actualWorkflows.includes(relative)) fail(`expected workflow is not documented: ${relative}`);
+}
+
+const placeholderMap = fs.readFileSync(path.join(root, "docs", "placeholder-map.md"), "utf8");
+for (const placeholder of placeholdersInWorkflows) {
+  if (!placeholderMap.includes(`\`${placeholder}\``)) {
+    fail(`placeholder is missing from docs/placeholder-map.md: ${placeholder}`);
+  }
+}
+for (const generic of ["REPLACE-TABLE-ID", "REPLACE-AIRTABLE-TABLE-ID", "REPLACE-SUBWORKFLOW-ID"]) {
+  if (placeholdersInWorkflows.has(generic)) fail(`generic placeholder remains: ${generic}`);
+}
+
 function walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
@@ -84,6 +121,70 @@ function walk(dir) {
 }
 
 walk(path.join(root, "fixtures"));
+
+const privateTextPattern = /(?:app|tbl|rec)[0-9A-Za-z]{14,}|\br-?\d{10,}\b|\b\d{12,}\b/;
+const privateEmailPattern = /[A-Za-z0-9._%+-]+@(?:gmail|yahoo|hotmail|outlook)\.[A-Za-z]{2,}/i;
+const textExtensions = new Set([".json", ".md", ".mjs", ".cjs", ".yml", ".yaml"]);
+function scanPublicText(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === ".git") continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) scanPublicText(full);
+    else if (textExtensions.has(path.extname(entry.name))) {
+      const raw = fs.readFileSync(full, "utf8");
+      if (secretPattern.test(raw)) fail(`${path.relative(root, full)} contains a secret-like value`);
+      if (privateTextPattern.test(raw)) fail(`${path.relative(root, full)} contains a private identifier`);
+      if (privateEmailPattern.test(raw)) fail(`${path.relative(root, full)} contains a private email address`);
+    }
+  }
+}
+
+scanPublicText(root);
+
+function checkMarkdownLinks(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === ".git") continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) checkMarkdownLinks(full);
+    else if (entry.name.endsWith(".md")) {
+      const raw = fs.readFileSync(full, "utf8");
+      for (const match of raw.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
+        const link = match[1].split("#")[0].replace(/^<|>$/g, "");
+        if (!link || /^(?:https?:|mailto:)/.test(link)) continue;
+        const resolved = path.resolve(path.dirname(full), link);
+        if (!fs.existsSync(resolved)) {
+          fail(`${path.relative(root, full)} has broken link: ${link}`);
+        }
+      }
+    }
+  }
+}
+
+checkMarkdownLinks(root);
+
+const report = fs.readFileSync(path.join(root, "docs", "test-report.md"), "utf8");
+for (const match of report.matchAll(/fixtures\/[A-Za-z0-9._/-]+\.json/g)) {
+  if (!fs.existsSync(path.join(root, match[0]))) {
+    fail(`test report references missing fixture: ${match[0]}`);
+  }
+}
+
+function collectFixtureIds(dir) {
+  const ids = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) ids.push(...collectFixtureIds(full));
+    else if (entry.name.endsWith(".json")) {
+      const parsed = JSON.parse(fs.readFileSync(full, "utf8"));
+      if (typeof parsed.test_id === "string") ids.push(parsed.test_id);
+    }
+  }
+  return ids;
+}
+
+for (const testId of collectFixtureIds(path.join(root, "fixtures"))) {
+  if (!report.includes(testId)) fail(`fixture ID is missing from test report: ${testId}`);
+}
 
 if (failures) {
   console.error(`Validation failed with ${failures} issue(s).`);

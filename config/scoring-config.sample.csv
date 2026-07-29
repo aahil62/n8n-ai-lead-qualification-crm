@@ -1,0 +1,4 @@
+signal,operator,value,weight,active
+budget_supplied,exists,,25,true
+decision_maker_role,regex,owner|founder|director,25,true
+urgent_readiness,regex,ready|asap|approved,15,true

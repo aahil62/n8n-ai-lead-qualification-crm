@@ -30,11 +30,11 @@ All fixtures use `@northstar.example` emails and Northstar Growth Studio fiction
 | Test ID | Scenario | Fixture | Entry | Required observable result |
 |---|---|---|---|---|
 | P1-E2E-001 | High-quality new lead | `valid/P1-E2E-001.json` | P1-01 webhook | One contact + one deal upserted; correct score, owner, alert, `synced` state, and external IDs |
-| P1-E2E-002 | Warm lead missing budget | `valid/P1-E2E-002.json` | P1-01 webhook | No deal; approved question/draft created; follow-up state stored |
+| P1-E2E-002 | Warm lead missing budget | `valid/P1-E2E-002.json` | P1-01 webhook | Missing information recorded, nurture state stored, and owner follow-up scheduled; no deal |
 | P1-E2E-003 | Cold lead | `valid/P1-E2E-003.json` | P1-01 webhook | No deal and no sales alert; audited correctly |
 | P1-E2E-004 | Low AI confidence | `edge-cases/P1-E2E-004.json` | P1-01 webhook | Review record + human alert; no automated external side effect |
-| P1-E2E-005 | Existing customer request | `valid/P1-E2E-005.json` | P1-01 webhook | Routed to support queue; no new sales deal |
-| P1-E2E-006 | Spam/newsletter | `valid/P1-E2E-006.json` | P1-01 webhook | Stopped and audited; no reply, deal, or task |
+| P1-E2E-005 | Existing customer request | `edge-cases/P1-E2E-005.json` | P1-01 webhook | Classified as an existing-customer request; no new sales deal |
+| P1-E2E-006 | Spam/newsletter | `edge-cases/P1-E2E-006.json` | P1-01 webhook | Stopped and audited; no reply, deal, or task |
 | P1-E2E-007 | Duplicate webhook replay | `edge-cases/P1-E2E-007.json` | P1-01 webhook ×2 | Same lead state and CRM IDs; no duplicate contact/deal/alert |
 | P1-E2E-008 | Returning lead adds timeline | `edge-cases/P1-E2E-008.json` | seeded + P1-01 | Existing facts preserved, new signal merged, score recalculated |
 | P1-E2E-009 | CRM 429/5xx | `failure-cases/P1-E2E-009.json` | P1-01 (induce 429) | Capped retry; success or dead-letter with replay data; no false `synced` |
